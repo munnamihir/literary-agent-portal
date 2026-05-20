@@ -29,7 +29,7 @@ async function callClaude({ apiKey, messages, system, max_tokens = 1800 }) {
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
-    body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens, messages, ...(system && { system }) }),
+    body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens, messages, ...(system && { system }) }),
   });
   if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`);
   return res.json();
@@ -39,11 +39,40 @@ async function callClaudeSearch({ apiKey, messages, system, max_tokens = 2400 })
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
-    body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens, messages, ...(system && { system }), tools: [{ type: "web_search_20250305", name: "web_search" }] }),
+    body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens, messages, ...(system && { system }), tools: [{ type: "web_search_20250305", name: "web_search" }] }),
   });
   if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`);
   const data = await res.json();
   return (data.content || []).filter(b => b.type === "text").map(b => b.text).join("\n");
+}
+
+
+// ── Robust JSON extractor ─────────────────────────────────────────────────
+function extractJSON(text) {
+  const clean = text.replace(/```json|```/g, "").trim();
+  const s = clean.indexOf("["), e = clean.lastIndexOf("]");
+  if (s === -1 || e === -1) throw new Error("No JSON array found in response.");
+  let slice = clean.slice(s, e + 1);
+  // Fix common AI JSON issues: trailing commas before ] or }
+  slice = slice.replace(/,\s*([}\]])/g, "$1");
+  // Remove control characters
+  slice = slice.replace(/[\u0000-\u001F\u007F]/g, (c) => {
+    if (c === "\n" || c === "\r" || c === "\t") return c;
+    return "";
+  });
+  try {
+    return JSON.parse(slice);
+  } catch(err) {
+    // Last resort: try to extract objects one by one
+    const items = [];
+    const objRegex = /\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/g;
+    let match;
+    while ((match = objRegex.exec(slice)) !== null) {
+      try { items.push(JSON.parse(match[0])); } catch {}
+    }
+    if (items.length > 0) return items;
+    throw new Error("Could not parse AI response as JSON. Try again.");
+  }
 }
 
 // ── Misc helpers ──────────────────────────────────────────────────────────
@@ -108,7 +137,7 @@ function ApiKeySetup({ onSave }) {
       const res = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
-        body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 10, messages: [{ role: "user", content: "hi" }] }),
+        body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 10, messages: [{ role: "user", content: "hi" }] }),
       });
       if (!res.ok) { const t = await res.text(); throw new Error(t); }
       onSave(key);
@@ -462,10 +491,7 @@ function AgentFinder({ apiKey, book, agents, onAdd }) {
 Return 5-8 agents currently open to Epic Fantasy queries.`,
         messages: [{ role: "user", content: `Search the web for literary agents currently open to Epic Fantasy or High Fantasy manuscripts in 2025. ${bookCtx} Find agents who are open and include their submission requirements. Return only the JSON array.` }],
       });
-      const clean = text.replace(/```json|```/g, "").trim();
-      const s = clean.indexOf("["), e = clean.lastIndexOf("]");
-      if (s === -1 || e === -1) throw new Error("Could not parse results — try again.");
-      const arr = JSON.parse(clean.slice(s, e + 1));
+      const arr = extractJSON(text);
       setResults(arr.map(a => ({ ...a, id: mkId(), history: [], added: today(), status: "researching", req: { queryLetter: true, synopsis: false, synopsisLen: "", samplePages: 10, bio: false, comps: true, wordCount: true, other: "", ...(a.req || {}) } })));
     } catch (e) { setErr(e.message); }
     setLoading(false);
@@ -617,10 +643,7 @@ function CompFinder({ apiKey, book }) {
 [{"title":"","author":"","year":2023,"publisher":"","why":"why it's a good comp","agentFriendly":true}]`,
         messages: [{ role: "user", content: `Search for Epic Fantasy books published 2021–2025 for query letter comps. ${ctx} Find 6–8 traditionally published books with similar themes, tone, or audience. Return only JSON array.` }],
       });
-      const clean = text.replace(/```json|```/g, "").trim();
-      const s = clean.indexOf("["), e = clean.lastIndexOf("]");
-      if (s === -1 || e === -1) throw new Error("Could not parse results.");
-      setComps(JSON.parse(clean.slice(s, e + 1)));
+      setComps(extractJSON(text));
     } catch (e) { setErr(e.message); }
     setLoading(false);
   };
