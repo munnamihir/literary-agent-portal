@@ -29,7 +29,7 @@ async function callClaude({ apiKey, messages, system, max_tokens = 1800 }) {
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
-    body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens, messages, ...(system && { system }) }),
+    body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens, messages, ...(system && { system }) }),
   });
   if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`);
   return res.json();
@@ -39,7 +39,7 @@ async function callClaudeSearch({ apiKey, messages, system, max_tokens = 2400 })
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
-    body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens, messages, ...(system && { system }), tools: [{ type: "web_search_20250305", name: "web_search" }] }),
+    body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens, messages, ...(system && { system }), tools: [{ type: "web_search_20250305", name: "web_search" }] }),
   });
   if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`);
   const data = await res.json();
@@ -108,7 +108,7 @@ function ApiKeySetup({ onSave }) {
       const res = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
-        body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 10, messages: [{ role: "user", content: "hi" }] }),
+        body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 10, messages: [{ role: "user", content: "hi" }] }),
       });
       if (!res.ok) { const t = await res.text(); throw new Error(t); }
       onSave(key);
